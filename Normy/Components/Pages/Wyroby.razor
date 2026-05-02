@@ -1,0 +1,185 @@
+﻿@page "/wyroby"
+@rendermode InteractiveServer
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@using System.Linq
+
+
+<h3>Wyroby</h3>
+
+<h4>Dodaj wyrób</h4>
+
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <label>Nr wyrobu</label>
+        <input class="form-control" @bind="nowyNumerWyrobu" />
+    </div>
+
+    <div class="col-md-4 mb-3">
+        <label>Nr operacji</label>
+        <input class="form-control" @bind="nowyNumerOperacji" />
+    </div>
+
+    <div class="col-md-4 mb-3">
+        <label>Nr maszyny</label>
+        <input class="form-control" @bind="nowyNumerMaszyny" />
+    </div>
+</div>
+
+<button class="btn btn-success" @onclick="DodajWyrob">
+    Dodaj wyrób
+</button>
+
+<hr />
+
+<h4>Wyszukiwanie i filtrowanie</h4>
+
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <label>Szukaj</label>
+        <input class="form-control"
+               placeholder="Nr wyrobu, operacja, maszyna..."
+               @bind="tekstSzukania"
+               @bind:event="oninput" />
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <label>Status</label>
+        <select class="form-select" @bind="wybranyStatus">
+            <option value="">Wszystkie</option>
+            <option value="W trakcie">W trakcie</option>
+            <option value="Do przeliczenia">Do przeliczenia</option>
+            <option value="Wyliczona norma">Wyliczona norma</option>
+            <option value="Zatwierdzona">Zatwierdzona</option>
+            <option value="Archiwalna">Archiwalna</option>
+        </select>
+    </div>
+</div>
+
+<h4>Lista wyrobów</h4>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Nr wyrobu</th>
+            <th>Operacja</th>
+            <th>Maszyna</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var wyrob in FiltrowaneWyroby)
+        {
+            <tr>
+                <td>@wyrob.NumerWyrobu</td>
+                <td>@wyrob.NumerOperacji</td>
+                <td>@wyrob.NumerMaszyny</td>
+                <td>@wyrob.Status</td>
+                <td>
+                    <button class="btn btn-primary btn-sm"
+                            @onclick="() => OtworzWyrob(wyrob)">
+                    Otwórz
+                    </button>
+                    <button class="btn btn-danger btn-sm"
+                            @onclick="() => PotwierdzUsuniecie(wyrob)">
+                        Usuń
+                    </button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private string nowyNumerWyrobu = "";
+    private string nowyNumerOperacji = "";
+    private string nowyNumerMaszyny = "";
+
+    private string tekstSzukania = "";
+    private string wybranyStatus = "";
+
+    private List<WyrobViewModel> wyroby = new()
+    {
+        new WyrobViewModel
+        {
+            NumerWyrobu = "12345",
+            NumerOperacji = "10",
+            NumerMaszyny = "M-01",
+            Status = "W trakcie"
+        },
+        new WyrobViewModel 
+        { 
+            NumerWyrobu = "99999", 
+            NumerOperacji = "20", 
+            NumerMaszyny = "M-02", 
+            Status = "Zatwierdzona" 
+        },
+        new WyrobViewModel 
+        { 
+            NumerWyrobu = "55555",
+            NumerOperacji = "30", 
+            NumerMaszyny = "M-03", 
+            Status = "Archiwalna" 
+        }
+    };
+
+    private IEnumerable<WyrobViewModel> FiltrowaneWyroby =>
+        wyroby.Where(w =>
+            (string.IsNullOrWhiteSpace(tekstSzukania)
+             || w.NumerWyrobu.Contains(tekstSzukania, StringComparison.OrdinalIgnoreCase)
+             || w.NumerOperacji.Contains(tekstSzukania, StringComparison.OrdinalIgnoreCase)
+             || w.NumerMaszyny.Contains(tekstSzukania, StringComparison.OrdinalIgnoreCase))
+            &&
+            (string.IsNullOrWhiteSpace(wybranyStatus)
+             || w.Status == wybranyStatus));
+
+    private void DodajWyrob()
+    {
+        if (string.IsNullOrWhiteSpace(nowyNumerWyrobu)
+            || string.IsNullOrWhiteSpace(nowyNumerOperacji)
+            || string.IsNullOrWhiteSpace(nowyNumerMaszyny))
+        {
+            return;
+        }
+
+        wyroby.Add(new WyrobViewModel
+        {
+            NumerWyrobu = nowyNumerWyrobu,
+            NumerOperacji = nowyNumerOperacji,
+            NumerMaszyny = nowyNumerMaszyny,
+            Status = "W trakcie"
+        });
+
+        nowyNumerWyrobu = "";
+        nowyNumerOperacji = "";
+        nowyNumerMaszyny = "";
+    }
+
+    private void OtworzWyrob(WyrobViewModel wyrob)
+    {
+        Nav.NavigateTo($"/wyrob/{wyrob.NumerWyrobu}/{wyrob.NumerOperacji}");
+    }
+
+    private class WyrobViewModel
+    {
+        public string NumerWyrobu { get; set; } = "";
+        public string NumerOperacji { get; set; } = "";
+        public string NumerMaszyny { get; set; } = "";
+        public string Status { get; set; } = "";
+    }
+
+    private async Task PotwierdzUsuniecie(WyrobViewModel wyrob)
+    {
+        var potwierdzone = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Czy na pewno chcesz usunąć wyrób {wyrob.NumerWyrobu}?"
+        );
+
+        if (potwierdzone)
+        {
+            wyroby.Remove(wyrob);
+        }
+    }
+
+}

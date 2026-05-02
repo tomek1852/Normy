@@ -1,0 +1,410 @@
+﻿@page "/wyrob/{numerWyrobu}/{numerOperacji}"
+@rendermode InteractiveServer
+@using Normy.Models
+@using Normy.Components
+
+<h3>Szczegóły wyrobu</h3>
+
+<p><b>Nr wyrobu:</b> @numerWyrobu</p>
+<p><b>Operacja:</b> @numerOperacji</p>
+
+<hr />
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <button class="nav-link @(aktywnyWidok == "pomiar1" ? "active" : "")"
+                @onclick='() => UstawWidok("pomiar1")'>
+            Pomiar 1
+        </button>
+    </li>
+
+    <li class="nav-item">
+        <button class="nav-link @(aktywnyWidok == "pomiar2" ? "active" : "")"
+                @onclick='() => UstawWidok("pomiar2")'>
+            Pomiar 2
+        </button>
+    </li>
+
+    <li class="nav-item">
+        <button class="nav-link @(aktywnyWidok == "pomiar3" ? "active" : "")"
+                @onclick='() => UstawWidok("pomiar3")'>
+            Pomiar 3
+        </button>
+    </li>
+
+    <li class="nav-item">
+        <button class="nav-link @(aktywnyWidok == "top50" ? "active" : "")"
+                @onclick='() => UstawWidok("top50")'>
+            TOP 50
+        </button>
+    </li>
+
+    <li class="nav-item">
+        <button class="nav-link @(aktywnyWidok == "podsumowanie" ? "active" : "")"
+                @onclick='() => UstawWidok("podsumowanie")'>
+            Podsumowanie
+        </button>
+    </li>
+</ul>
+
+@if (aktywnyWidok == "pomiar1")
+{
+    <PomiarWidok Tytul="Pomiar 1" Pomiar="pomiar1" Pomiary="pomiary1" OnSredniaChanged="(v) => SredniaTop50Pomiar1 = v" />
+}
+else if (aktywnyWidok == "pomiar2")
+{
+    <PomiarWidok Tytul="Pomiar 2" Pomiar="pomiar2" Pomiary="pomiary2" OnSredniaChanged="(v) => SredniaTop50Pomiar2 = v" />
+}
+else if (aktywnyWidok == "pomiar3")
+{
+    <PomiarWidok Tytul="Pomiar 3" Pomiar="pomiar3" Pomiary="pomiary3" OnSredniaChanged="(v) => SredniaTop50Pomiar3 = v" />
+}
+else if (aktywnyWidok == "top50")
+{
+    <h4>TOP 50 pomiarów</h4>
+
+    <div class="row">
+        <div class="col-md-4">
+            <h5>Pomiar 1</h5>
+            <Top50Tabela Pomiary="pomiary1" />
+        </div>
+
+        <div class="col-md-4">
+            <h5>Pomiar 2</h5>
+            <Top50Tabela Pomiary="pomiary2" />
+        </div>
+
+        <div class="col-md-4">
+            <h5>Pomiar 3</h5>
+            <Top50Tabela Pomiary="pomiary3" />
+        </div>
+    </div>
+}
+else if (aktywnyWidok == "podsumowanie")
+{
+    <h4>Podsumowanie</h4>
+
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox" @bind="uwzglednijPomiar1" />
+        <label class="form-check-label">
+            Uwzględnij Pomiar 1 — @PokazSrednia(SredniaTop50Pomiar1)
+        </label>
+    </div>
+
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox" @bind="uwzglednijPomiar2" />
+        <label class="form-check-label">
+            Uwzględnij Pomiar 2 — @PokazSrednia(SredniaTop50Pomiar2)
+        </label>
+    </div>
+
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" @bind="uwzglednijPomiar3" />
+        <label class="form-check-label">
+            Uwzględnij Pomiar 3 — @PokazSrednia(SredniaTop50Pomiar3)
+        </label>
+    </div>
+
+    @if (SredniaKoncowa.HasValue)
+    {
+        <div class="alert alert-primary">
+            Średni czas cyklu końcowy: <b>@SredniaKoncowa s</b>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning">
+            Brak pomiarów wybranych do średniej końcowej.
+        </div>
+    }
+    <h5>Dodatkowe czynności</h5>
+
+    <button class="btn btn-success btn-sm mb-3" @onclick="DodajDodatkowaCzynnosc">
+        Dodaj czynność
+    </button>
+
+    <table class="table table-sm table-striped">
+        <thead>
+            <tr>
+                <th>Nazwa</th>
+                <th>Z pomiarów</th>
+                <th>Co ile sztuk</th>
+                <th>Pomiar 1 (s)</th>
+                <th>Pomiar 2 (s)</th>
+                <th>Pomiar 3 (s)</th>
+                <th>Pomiar 4 (s)</th>
+                <th>Pomiar 5 (s)</th>
+                <th>Średnia (s)</th>
+                <th>Czas/szt.</th>
+                <th>Akcja</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in dodatkoweCzynnosci)
+            {
+                <tr>
+
+                    <td>
+                        <select class="form-select form-select-sm"
+                                @bind="c.WybranaCzynnoscZPomiarow">
+                            <option value="">Ręcznie</option>
+                            @foreach (var nazwa in DostepneDodatkoweCzynnosci)
+                            {
+                                <option value="@nazwa">@nazwa</option>
+                            }
+                        </select>
+
+                        <button class="btn btn-outline-primary btn-sm mt-1"
+                                @onclick="() => WczytajCzasyZDodatkowejCzynnosci(c)">
+                            Wczytaj
+                        </button>
+                    </td>
+
+                    <td>
+                        <input class="form-control form-control-sm" @bind="c.Nazwa" />
+                    </td>
+
+                    <td>
+                        <input type="number" class="form-control form-control-sm" @bind="c.CoIleSztuk" />
+                    </td>
+
+                    <td><input type="number" class="form-control form-control-sm" @bind="c.Pomiar1" /></td>
+                    <td><input type="number" class="form-control form-control-sm" @bind="c.Pomiar2" /></td>
+                    <td><input type="number" class="form-control form-control-sm" @bind="c.Pomiar3" /></td>
+                    <td><input type="number" class="form-control form-control-sm" @bind="c.Pomiar4" /></td>
+                    <td><input type="number" class="form-control form-control-sm" @bind="c.Pomiar5" /></td>
+
+                    <td>@c.Srednia</td>
+
+                    <td>@c.CzasNaSztuke</td>
+
+                    <td>
+                        <button class="btn btn-danger btn-sm"
+                                @onclick="() => UsunDodatkowaCzynnosc(c)">
+                            Usuń
+                        </button>
+                    </td>
+
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h5>Norma produkcyjna</h5>
+
+    <div class="row">
+        <div class="col-md-3 mb-3">
+            <label>Czas zmiany (min)</label>
+            <input type="number" class="form-control" @bind="CzasZmianyMinuty" />
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <label>Przerwa (min)</label>
+            <input type="number" class="form-control" @bind="PrzerwaMinuty" />
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <label>Dostępny czas (s)</label>
+            <input class="form-control" value="@DostepnyCzasSekundy" disabled />
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <label>Czas jednostkowy (s)</label>
+            <input class="form-control" value="@CzasJednostkowy" disabled />
+        </div>
+    </div>
+
+    @if (NormaNaZmiane.HasValue)
+    {
+        <div class="alert alert-success">
+            Norma produkcyjna: <b>@NormaNaZmiane szt./zmianę</b>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning">
+            Brak danych do wyliczenia normy.
+        </div>
+    }
+
+    <div class="alert alert-secondary">
+        Suma dodatkowych czynności na sztukę:
+        <b>@SumaDodatkowychCzynnosciNaSztuke s</b>
+    </div>
+    @if (DodatkoweZPomiarow.Any())
+    {
+        <div class="alert alert-info">
+            Dodatkowe czynności z pomiarów:
+            <b>@SredniaDodatkowychZPomiarow s</b>
+            (średnia z @DodatkoweZPomiarow.Count pomiarów)
+        </div>
+    }
+}
+
+
+
+
+@code {
+
+    [Parameter] public string numerWyrobu { get; set; } = "";
+    [Parameter] public string numerOperacji { get; set; } = "";
+
+    private string aktywnyWidok = "pomiar1";
+
+    private void UstawWidok(string widok)
+    {
+        aktywnyWidok = widok;
+    }
+
+    private double? SredniaTop50Pomiar1;
+    private double? SredniaTop50Pomiar2;
+    private double? SredniaTop50Pomiar3;
+
+    private PomiarModel pomiar1 = new();
+    private PomiarModel pomiar2 = new();
+    private PomiarModel pomiar3 = new();
+
+    private List<PomiarCzasu> pomiary1 = new();
+    private List<PomiarCzasu> pomiary2 = new();
+    private List<PomiarCzasu> pomiary3 = new();
+
+    private bool uwzglednijPomiar1 = true;
+    private bool uwzglednijPomiar2 = true;
+    private bool uwzglednijPomiar3 = true;
+
+    private double? SredniaKoncowa
+    {
+        get
+        {
+            var dane = new List<double>();
+
+            if (uwzglednijPomiar1 && SredniaTop50Pomiar1.HasValue)
+                dane.Add(SredniaTop50Pomiar1.Value);
+
+            if (uwzglednijPomiar2 && SredniaTop50Pomiar2.HasValue)
+                dane.Add(SredniaTop50Pomiar2.Value);
+
+            if (uwzglednijPomiar3 && SredniaTop50Pomiar3.HasValue)
+                dane.Add(SredniaTop50Pomiar3.Value);
+
+            if (!dane.Any())
+                return null;
+
+            return Math.Round(dane.Average(), 2);
+        }
+    }
+
+    private string PokazSrednia(double? srednia)
+    {
+        return srednia.HasValue
+            ? $"{srednia.Value} s"
+            : "brak danych";
+    }
+
+    private List<DodatkowaCzynnosc> dodatkoweCzynnosci = new();
+
+    private void DodajDodatkowaCzynnosc()
+    {
+        dodatkoweCzynnosci.Add(new DodatkowaCzynnosc
+        {
+            Nazwa = "",
+            CoIleSztuk = 1
+        });
+    }
+
+    private double SumaDodatkowychCzynnosciNaSztuke =>
+        Math.Round(dodatkoweCzynnosci.Sum(x => x.CzasNaSztuke), 4);
+
+    private List<double> DodatkoweZPomiarow =>
+        pomiary1
+            .Concat(pomiary2)
+            .Concat(pomiary3)
+            .Where(p => p.DodatkowaCzynnosc)
+            .Select(p => p.Czas)
+            .ToList();
+
+
+    private double SredniaDodatkowychZPomiarow =>
+    DodatkoweZPomiarow.Any()
+        ? Math.Round(DodatkoweZPomiarow.Average(), 2)
+        : 0;
+
+    private double SumaDodatkowychCzynnosciFinal =>
+    Math.Round(
+        SumaDodatkowychCzynnosciNaSztuke +
+        (SredniaDodatkowychZPomiarow / 100), // np. przelicznik później dopracujemy
+        4
+    );
+
+    private List<string> DostepneDodatkoweCzynnosci =>
+    pomiary1
+        .Concat(pomiary2)
+        .Concat(pomiary3)
+        .Where(p => p.DodatkowaCzynnosc && !string.IsNullOrWhiteSpace(p.Uwagi))
+        .Select(p => p.Uwagi.Trim())
+        .Distinct()
+        .OrderBy(x => x)
+        .ToList();
+
+    private void WczytajCzasyZDodatkowejCzynnosci(DodatkowaCzynnosc czynnosc)
+    {
+        if (string.IsNullOrWhiteSpace(czynnosc.WybranaCzynnoscZPomiarow))
+            return;
+
+        var czasy = pomiary1
+            .Concat(pomiary2)
+            .Concat(pomiary3)
+            .Where(p =>
+                p.DodatkowaCzynnosc &&
+                !p.Wykluczony &&
+                string.Equals(
+                    p.Uwagi?.Trim(),
+                    czynnosc.WybranaCzynnoscZPomiarow.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Czas)
+            .Take(5)
+            .Select(p => p.Czas)
+            .ToList();
+
+        czynnosc.Nazwa = czynnosc.WybranaCzynnoscZPomiarow;
+
+        czynnosc.Pomiar1 = czasy.ElementAtOrDefault(0);
+        czynnosc.Pomiar2 = czasy.ElementAtOrDefault(1);
+        czynnosc.Pomiar3 = czasy.ElementAtOrDefault(2);
+        czynnosc.Pomiar4 = czasy.ElementAtOrDefault(3);
+        czynnosc.Pomiar5 = czasy.ElementAtOrDefault(4);
+    }
+
+    private int CzasZmianyMinuty { get; set; } = 480;
+    private int PrzerwaMinuty { get; set; } = 30;
+
+    private int DostepnyCzasSekundy =>
+        Math.Max(0, (CzasZmianyMinuty - PrzerwaMinuty) * 60);
+
+    private double? CzasJednostkowy
+    {
+        get
+        {
+            if (!SredniaKoncowa.HasValue)
+                return null;
+
+            return Math.Round(SredniaKoncowa.Value + SumaDodatkowychCzynnosciNaSztuke, 4);
+        }
+    }
+
+    private int? NormaNaZmiane
+    {
+        get
+        {
+            if (!CzasJednostkowy.HasValue || CzasJednostkowy.Value <= 0)
+                return null;
+
+            return (int)Math.Floor(DostepnyCzasSekundy / CzasJednostkowy.Value);
+        }
+    }
+
+    private void UsunDodatkowaCzynnosc(DodatkowaCzynnosc czynnosc)
+    {
+        dodatkoweCzynnosci.Remove(czynnosc);
+    }
+}

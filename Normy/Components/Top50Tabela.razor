@@ -1,0 +1,63 @@
+﻿@using Normy.Models
+
+@if (!Top50.Any())
+{
+    <div class="alert alert-warning">
+        Brak danych
+    </div>
+}
+else
+{
+    <table class="table table-sm table-striped">
+        <thead>
+            <tr>
+                <th>Lp.</th>
+                <th>Czas (s)</th>
+                <th>Uwagi</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in Top50)
+            {
+                <tr>
+                    <td>@p.Numer</td>
+                    <td>@p.Czas</td>
+                    <td>@p.Uwagi</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public List<PomiarCzasu> Pomiary { get; set; } = new();
+
+    private List<PomiarCzasu> Top50
+    {
+        get
+        {
+            var top50 = Pomiary
+                .Where(p => !p.Wykluczony && !p.DodatkowaCzynnosc)
+                .OrderBy(p => p.Czas)
+                .Take(50)
+                .ToList();
+
+            if (top50.Count < 5)
+                return top50;
+
+            var czasy = top50.Select(p => p.Czas).OrderBy(x => x).ToList();
+
+            double q1 = czasy[(int)(czasy.Count * 0.25)];
+            double q3 = czasy[(int)(czasy.Count * 0.75)];
+            double iqr = q3 - q1;
+
+            double min = q1 - 1.5 * iqr;
+            double max = q3 + 1.5 * iqr;
+
+            return top50
+                .Where(p => p.Czas >= min && p.Czas <= max)
+                .OrderBy(p => p.Czas)
+                .ToList();
+        }
+    }
+}

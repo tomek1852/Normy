@@ -1,0 +1,264 @@
+﻿@using Normy.Models
+@using Normy.Components
+@rendermode InteractiveServer
+
+<h4>@Tytul</h4>
+
+<div class="row">
+    <div class="col-md-3 mb-3">
+        <label>Data</label>
+        <input type="date" class="form-control" @bind="Pomiar.Data" />
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <label>Zmiana</label>
+        <select class="form-select" @bind="Pomiar.Zmiana">
+            <option>I</option>
+            <option>II</option>
+            <option>III</option>
+        </select>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <label>Pracownik</label>
+        <input class="form-control" @bind="Pomiar.Pracownik" />
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3 mb-3">
+        <label>Godzina start</label>
+        <input type="time" class="form-control" @bind="Pomiar.GodzinaStart" />
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <label>Licznik start</label>
+        <input type="number" class="form-control" @bind="Pomiar.LicznikStart" />
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <label>Godzina stop</label>
+        <input type="time" class="form-control" @bind="Pomiar.GodzinaStop" />
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <label>Licznik stop</label>
+        <input type="number" class="form-control" @bind="Pomiar.LicznikStop" />
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <label>Liczba sztuk</label>
+        <input class="form-control" value="@LiczbaSztuk" disabled />
+    </div>
+    @if (CzasTrwaniaPomiaru.HasValue)
+    {
+        <div class="col-md-3 mb-3">
+            <label>Czas trwania</label>
+            <input class="form-control"
+                   value="@CzasTrwaniaPomiaru.Value.ToString(@"hh\:mm\:ss")"
+                   disabled />
+        </div>
+    }
+    @if (SredniCzasPomiar.HasValue)
+    {
+        <div class="alert alert-info">
+            Średni czas cyklu: <b>@SredniCzasPomiar s</b>
+        </div>
+    }
+    @if (SredniaTop50.HasValue)
+    {
+        <div class="alert alert-success">
+            TOP 50 średnia: <b>@SredniaTop50 s</b>
+        </div>
+    }
+    <div class="text-muted">
+        Odrzucone pomiary: @LiczbaOdrzuconych
+    </div>
+</div>
+
+<hr />
+
+<h5>Stoper</h5>
+
+<p><b>Czas:</b> @czasStopera s</p>
+
+<div class="mb-3">
+    <button class="btn btn-success me-2" @onclick="StartStopera">Start</button>
+    <button class="btn btn-warning me-2" @onclick="StopStopera">Stop</button>
+    <button class="btn btn-secondary me-2" @onclick="ResetStopera">Reset</button>
+</div>
+
+<div class="col-md-6 mb-3">
+    <label>Uwagi do pomiaru</label>
+    <input class="form-control"
+           placeholder="np. regulacja, zatrzymanie, problem z detalem..."
+           @bind="uwagiDoPomiaru" />
+</div>
+
+<button class="btn btn-primary" @onclick="ZapiszPomiar">Zapisz pomiar</button>
+
+<hr />
+
+<h5>Pomiary</h5>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Lp.</th>
+            <th>Czas (s)</th>
+            <th>Uwagi</th>
+            <th>Wyklucz</th>
+            <th>Dod. czynność</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var p in Pomiary.OrderByDescending(x => x.Numer))
+        {
+            <tr class="@(p.Wykluczony ? "table-secondary" : "")">
+                <td>@p.Numer</td>
+                <td>@p.Czas</td>
+
+                <td>
+                    <input class="form-control form-control-sm @(string.IsNullOrWhiteSpace(p.Uwagi) ? "" : "bg-danger-subtle")"
+                           @bind="p.Uwagi"
+                           @bind:event="oninput" />
+                </td>
+
+                <td>
+                    <input type="checkbox" @bind="p.Wykluczony" />
+                </td>
+
+                <td>
+                    <input type="checkbox" @bind="p.DodatkowaCzynnosc" />
+                </td>
+
+            </tr>
+        }
+    </tbody>
+
+</table>
+}
+
+@code {
+    [Parameter] public string Tytul { get; set; } = "";
+    [Parameter] public PomiarModel Pomiar { get; set; } = new();
+    [Parameter] public List<PomiarCzasu> Pomiary { get; set; } = new();
+    [Parameter] public EventCallback<double?> OnSredniaChanged { get; set; }
+
+    private string uwagiDoPomiaru = "";
+    private double czasStopera = 0;
+    private System.Timers.Timer? timer;
+
+    private int LiczbaSztuk =>
+        Pomiar.LicznikStop - Pomiar.LicznikStart;
+
+    private void StartStopera()
+    {
+        if (timer is not null && timer.Enabled)
+            return;
+
+        timer = new System.Timers.Timer(100);
+        timer.Elapsed += (s, e) =>
+        {
+            czasStopera += 0.1;
+            InvokeAsync(StateHasChanged);
+        };
+
+        timer.Start();
+
+        Pomiar.GodzinaStart ??= DateTime.Now;
+    }
+
+    private void StopStopera()
+    {
+        timer?.Stop();
+        Pomiar.GodzinaStop = DateTime.Now;
+    }
+
+    private void ResetStopera()
+    {
+        czasStopera = 0;
+    }
+
+    private async Task ZapiszPomiar()
+    {
+        Pomiary.Add(new PomiarCzasu
+        {
+            Numer = Pomiary.Count + 1,
+            Czas = Math.Round(czasStopera, 2),
+            Uwagi = uwagiDoPomiaru
+        });
+
+        czasStopera = 0;
+        uwagiDoPomiaru = "";
+
+        await OnSredniaChanged.InvokeAsync(SredniaTop50);
+
+    }
+
+
+    private TimeSpan? CzasTrwaniaPomiaru =>
+    Pomiar.GodzinaStart.HasValue && Pomiar.GodzinaStop.HasValue
+        ? Pomiar.GodzinaStop - Pomiar.GodzinaStart
+        : null;
+
+    private double? SredniCzasPomiar
+    {
+        get
+        {
+            var dane = Pomiary
+                .Where(p => !p.Wykluczony && !p.DodatkowaCzynnosc)
+                .Select(p => p.Czas)
+                .ToList();
+
+            if (!dane.Any())
+                return null;
+
+            return Math.Round(dane.Average(), 2);
+        }
+    }
+
+    private List<double> Top50Czasy
+    {
+        get
+        {
+            var top50 = Pomiary
+                .Where(p => !p.Wykluczony && !p.DodatkowaCzynnosc)
+                .Select(p => p.Czas)
+                .OrderBy(x => x)
+                .Take(50)
+                .ToList();
+
+            if (top50.Count < 5)
+                return top50;
+
+            double q1 = top50[(int)(top50.Count * 0.25)];
+            double q3 = top50[(int)(top50.Count * 0.75)];
+
+            double iqr = q3 - q1;
+
+            double min = q1 - 1.5 * iqr;
+            double max = q3 + 1.5 * iqr;
+
+            return top50
+                .Where(x => x >= min && x <= max)
+                .ToList();
+        }
+    }
+
+    private int LiczbaOdrzuconych =>
+    Pomiary.Count(p => !p.Wykluczony && !p.DodatkowaCzynnosc)
+    - Top50Czasy.Count;
+
+    private double? SredniaTop50
+    {
+        get
+        {
+            if (!Top50Czasy.Any())
+                return null;
+
+            return Math.Round(Top50Czasy.Average(), 2);
+        }
+    }
+
+}
