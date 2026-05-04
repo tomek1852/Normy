@@ -1,12 +1,14 @@
-﻿@page "/wyrob/{numerWyrobu}/{numerOperacji}"
-@rendermode InteractiveServer
+﻿@page "/wyrob/{wyrobId:int}"
+@using Microsoft.EntityFrameworkCore
+@using Normy.Data
 @using Normy.Models
-@using Normy.Components
+@inject ApplicationDbContext Db
+@rendermode InteractiveServer
 
 <h3>Szczegóły wyrobu</h3>
 
-<p><b>Nr wyrobu:</b> @numerWyrobu</p>
-<p><b>Operacja:</b> @numerOperacji</p>
+<p><b>Nr wyrobu:</b> @wyrob?.NumerWyrobu</p>
+<p><b>Operacja:</b> @wyrob?.NumerOperacji</p>
 
 <hr />
 
@@ -245,24 +247,19 @@ else if (aktywnyWidok == "podsumowanie")
 
 
 @code {
+    [Parameter] public int wyrobId { get; set; }
 
-    [Parameter] public string numerWyrobu { get; set; } = "";
-    [Parameter] public string numerOperacji { get; set; } = "";
+    private Wyrob? wyrob;
 
     private string aktywnyWidok = "pomiar1";
-
-    private void UstawWidok(string widok)
-    {
-        aktywnyWidok = widok;
-    }
 
     private double? SredniaTop50Pomiar1;
     private double? SredniaTop50Pomiar2;
     private double? SredniaTop50Pomiar3;
 
-    private PomiarModel pomiar1 = new();
-    private PomiarModel pomiar2 = new();
-    private PomiarModel pomiar3 = new();
+    private Pomiar pomiar1 = new();
+    private Pomiar pomiar2 = new();
+    private Pomiar pomiar3 = new();
 
     private List<PomiarCzasu> pomiary1 = new();
     private List<PomiarCzasu> pomiary2 = new();
@@ -271,6 +268,90 @@ else if (aktywnyWidok == "podsumowanie")
     private bool uwzglednijPomiar1 = true;
     private bool uwzglednijPomiar2 = true;
     private bool uwzglednijPomiar3 = true;
+
+    private List<DodatkowaCzynnosc> dodatkoweCzynnosci = new();
+
+    private int CzasZmianyMinuty { get; set; } = 480;
+    private int PrzerwaMinuty { get; set; } = 30;
+
+    private List<double> DodatkoweZPomiarow =>
+    pomiary1
+        .Concat(pomiary2)
+        .Concat(pomiary3)
+        .Where(p => p.DodatkowaCzynnosc)
+        .Select(p => p.Czas)
+        .ToList();
+
+    private double SredniaDodatkowychZPomiarow =>
+        DodatkoweZPomiarow.Any()
+            ? Math.Round(DodatkoweZPomiarow.Average(), 2)
+            : 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        wyrob = await Db.Wyroby
+            .FirstOrDefaultAsync(w => w.Id == wyrobId);
+
+        if (wyrob is null)
+            return;
+
+        pomiar1 = await PobierzLubUtworzPomiar(1);
+        pomiar2 = await PobierzLubUtworzPomiar(2);
+        pomiar3 = await PobierzLubUtworzPomiar(3);
+
+        pomiary1 = await PobierzCzasyPomiaru(pomiar1.Id);
+        pomiary2 = await PobierzCzasyPomiaru(pomiar2.Id);
+        pomiary3 = await PobierzCzasyPomiaru(pomiar3.Id);
+    }
+
+    private async Task<Pomiar> PobierzLubUtworzPomiar(int typ)
+    {
+        var pomiar = await Db.Pomiary
+            .FirstOrDefaultAsync(p => p.WyrobId == wyrobId && p.Typ == typ);
+
+        if (pomiar is not null)
+        {
+            pomiar.Czasy = new();
+            pomiar.Wyrob = null;
+            return pomiar;
+        }
+
+        pomiar = new Pomiar
+        {
+            WyrobId = wyrobId,
+            Typ = typ,
+            Data = DateTime.Today,
+            Zmiana = "I"
+        };
+
+        Db.Pomiary.Add(pomiar);
+        await Db.SaveChangesAsync();
+
+        return pomiar;
+    }
+
+    private async Task<List<PomiarCzasu>> PobierzCzasyPomiaru(int pomiarId)
+    {
+        return await Db.PomiaryCzasu
+            .Where(p => p.PomiarId == pomiarId)
+            .OrderBy(p => p.Numer)
+            .Select(p => new PomiarCzasu
+            {
+                Id = p.Id,
+                PomiarId = p.PomiarId,
+                Numer = p.Numer,
+                Czas = p.Czas,
+                Uwagi = p.Uwagi,
+                Wykluczony = p.Wykluczony,
+                DodatkowaCzynnosc = p.DodatkowaCzynnosc
+            })
+            .ToListAsync();
+    }
+
+    private void UstawWidok(string widok)
+    {
+        aktywnyWidok = widok;
+    }
 
     private double? SredniaKoncowa
     {
@@ -287,21 +368,14 @@ else if (aktywnyWidok == "podsumowanie")
             if (uwzglednijPomiar3 && SredniaTop50Pomiar3.HasValue)
                 dane.Add(SredniaTop50Pomiar3.Value);
 
-            if (!dane.Any())
-                return null;
-
-            return Math.Round(dane.Average(), 2);
+            return dane.Any() ? Math.Round(dane.Average(), 2) : null;
         }
     }
 
     private string PokazSrednia(double? srednia)
     {
-        return srednia.HasValue
-            ? $"{srednia.Value} s"
-            : "brak danych";
+        return srednia.HasValue ? $"{srednia.Value} s" : "brak danych";
     }
-
-    private List<DodatkowaCzynnosc> dodatkoweCzynnosci = new();
 
     private void DodajDodatkowaCzynnosc()
     {
@@ -312,39 +386,23 @@ else if (aktywnyWidok == "podsumowanie")
         });
     }
 
+    private void UsunDodatkowaCzynnosc(DodatkowaCzynnosc czynnosc)
+    {
+        dodatkoweCzynnosci.Remove(czynnosc);
+    }
+
     private double SumaDodatkowychCzynnosciNaSztuke =>
         Math.Round(dodatkoweCzynnosci.Sum(x => x.CzasNaSztuke), 4);
 
-    private List<double> DodatkoweZPomiarow =>
+    private List<string> DostepneDodatkoweCzynnosci =>
         pomiary1
             .Concat(pomiary2)
             .Concat(pomiary3)
-            .Where(p => p.DodatkowaCzynnosc)
-            .Select(p => p.Czas)
+            .Where(p => p.DodatkowaCzynnosc && !string.IsNullOrWhiteSpace(p.Uwagi))
+            .Select(p => p.Uwagi.Trim())
+            .Distinct()
+            .OrderBy(x => x)
             .ToList();
-
-
-    private double SredniaDodatkowychZPomiarow =>
-    DodatkoweZPomiarow.Any()
-        ? Math.Round(DodatkoweZPomiarow.Average(), 2)
-        : 0;
-
-    private double SumaDodatkowychCzynnosciFinal =>
-    Math.Round(
-        SumaDodatkowychCzynnosciNaSztuke +
-        (SredniaDodatkowychZPomiarow / 100), // np. przelicznik później dopracujemy
-        4
-    );
-
-    private List<string> DostepneDodatkoweCzynnosci =>
-    pomiary1
-        .Concat(pomiary2)
-        .Concat(pomiary3)
-        .Where(p => p.DodatkowaCzynnosc && !string.IsNullOrWhiteSpace(p.Uwagi))
-        .Select(p => p.Uwagi.Trim())
-        .Distinct()
-        .OrderBy(x => x)
-        .ToList();
 
     private void WczytajCzasyZDodatkowejCzynnosci(DodatkowaCzynnosc czynnosc)
     {
@@ -375,9 +433,6 @@ else if (aktywnyWidok == "podsumowanie")
         czynnosc.Pomiar5 = czasy.ElementAtOrDefault(4);
     }
 
-    private int CzasZmianyMinuty { get; set; } = 480;
-    private int PrzerwaMinuty { get; set; } = 30;
-
     private int DostepnyCzasSekundy =>
         Math.Max(0, (CzasZmianyMinuty - PrzerwaMinuty) * 60);
 
@@ -403,8 +458,4 @@ else if (aktywnyWidok == "podsumowanie")
         }
     }
 
-    private void UsunDodatkowaCzynnosc(DodatkowaCzynnosc czynnosc)
-    {
-        dodatkoweCzynnosci.Remove(czynnosc);
-    }
 }

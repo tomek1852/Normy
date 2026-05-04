@@ -3,6 +3,13 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @using System.Linq
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Authorize(Roles = "Administrator,Technolog")]
+@using Microsoft.AspNetCore.Authorization
+@using Normy.Data
+@using Normy.Models
+@inject ApplicationDbContext Db
+@using Microsoft.EntityFrameworkCore
 
 
 <h3>Wyroby</h3>
@@ -82,7 +89,7 @@
                     Otwórz
                     </button>
                     <button class="btn btn-danger btn-sm"
-                            @onclick="() => PotwierdzUsuniecie(wyrob)">
+                            @onclick="() => UsunWyrob(wyrob)">
                         Usuń
                     </button>
                 </td>
@@ -99,32 +106,14 @@
     private string tekstSzukania = "";
     private string wybranyStatus = "";
 
-    private List<WyrobViewModel> wyroby = new()
-    {
-        new WyrobViewModel
-        {
-            NumerWyrobu = "12345",
-            NumerOperacji = "10",
-            NumerMaszyny = "M-01",
-            Status = "W trakcie"
-        },
-        new WyrobViewModel 
-        { 
-            NumerWyrobu = "99999", 
-            NumerOperacji = "20", 
-            NumerMaszyny = "M-02", 
-            Status = "Zatwierdzona" 
-        },
-        new WyrobViewModel 
-        { 
-            NumerWyrobu = "55555",
-            NumerOperacji = "30", 
-            NumerMaszyny = "M-03", 
-            Status = "Archiwalna" 
-        }
-    };
+    private List<Wyrob> wyroby = new();
 
-    private IEnumerable<WyrobViewModel> FiltrowaneWyroby =>
+    protected override async Task OnInitializedAsync()
+    {
+        wyroby = await Db.Wyroby.ToListAsync();
+    }
+
+    private IEnumerable<Wyrob> FiltrowaneWyroby =>
         wyroby.Where(w =>
             (string.IsNullOrWhiteSpace(tekstSzukania)
              || w.NumerWyrobu.Contains(tekstSzukania, StringComparison.OrdinalIgnoreCase)
@@ -134,7 +123,7 @@
             (string.IsNullOrWhiteSpace(wybranyStatus)
              || w.Status == wybranyStatus));
 
-    private void DodajWyrob()
+    private async Task DodajWyrob()
     {
         if (string.IsNullOrWhiteSpace(nowyNumerWyrobu)
             || string.IsNullOrWhiteSpace(nowyNumerOperacji)
@@ -143,43 +132,35 @@
             return;
         }
 
-        wyroby.Add(new WyrobViewModel
+        var nowy = new Wyrob
         {
             NumerWyrobu = nowyNumerWyrobu,
             NumerOperacji = nowyNumerOperacji,
             NumerMaszyny = nowyNumerMaszyny,
             Status = "W trakcie"
-        });
+        };
+
+        Db.Wyroby.Add(nowy);
+        await Db.SaveChangesAsync();
+
+        wyroby.Add(nowy);
 
         nowyNumerWyrobu = "";
         nowyNumerOperacji = "";
         nowyNumerMaszyny = "";
     }
 
-    private void OtworzWyrob(WyrobViewModel wyrob)
+    private void OtworzWyrob(Wyrob wyrob)
     {
-        Nav.NavigateTo($"/wyrob/{wyrob.NumerWyrobu}/{wyrob.NumerOperacji}");
+        Nav.NavigateTo($"/wyrob/{wyrob.Id}");
     }
 
-    private class WyrobViewModel
+    private async Task UsunWyrob(Wyrob wyrob)
     {
-        public string NumerWyrobu { get; set; } = "";
-        public string NumerOperacji { get; set; } = "";
-        public string NumerMaszyny { get; set; } = "";
-        public string Status { get; set; } = "";
-    }
+        Db.Wyroby.Remove(wyrob);
+        await Db.SaveChangesAsync();
 
-    private async Task PotwierdzUsuniecie(WyrobViewModel wyrob)
-    {
-        var potwierdzone = await JS.InvokeAsync<bool>(
-            "confirm",
-            $"Czy na pewno chcesz usunąć wyrób {wyrob.NumerWyrobu}?"
-        );
-
-        if (potwierdzone)
-        {
-            wyroby.Remove(wyrob);
-        }
+        wyroby.Remove(wyrob);
     }
 
 }

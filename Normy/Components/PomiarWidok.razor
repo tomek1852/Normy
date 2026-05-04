@@ -1,6 +1,9 @@
 ﻿@using Normy.Models
 @using Normy.Components
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject Normy.Data.ApplicationDbContext Db
+@using Normy.Models
 
 <h4>@Tytul</h4>
 
@@ -95,7 +98,15 @@
            @bind="uwagiDoPomiaru" />
 </div>
 
-<button class="btn btn-primary" @onclick="ZapiszPomiar">Zapisz pomiar</button>
+<button class="btn btn-primary btn-sm mb-3 ms-2"
+        @onclick="ZapiszPomiar">
+    Zapisz pomiar
+</button>
+
+<button class="btn btn-outline-primary btn-sm mb-3"
+        @onclick="ZapiszNaglowekPomiaru">
+    Zapisz dane pomiaru
+</button>
 
 <hr />
 
@@ -137,11 +148,16 @@
     </tbody>
 
 </table>
-}
+
+<button class="btn btn-outline-success btn-sm"
+        @onclick="ZapiszZmianyWPomiarach">
+    Zapisz zmiany w tabeli
+</button>
+
 
 @code {
     [Parameter] public string Tytul { get; set; } = "";
-    [Parameter] public PomiarModel Pomiar { get; set; } = new();
+    [Parameter] public Pomiar Pomiar { get; set; } = new();
     [Parameter] public List<PomiarCzasu> Pomiary { get; set; } = new();
     [Parameter] public EventCallback<double?> OnSredniaChanged { get; set; }
 
@@ -151,6 +167,14 @@
 
     private int LiczbaSztuk =>
         Pomiar.LicznikStop - Pomiar.LicznikStart;
+
+    private async Task ZapiszZmianyWPomiarach()
+    {
+        Db.PomiaryCzasu.UpdateRange(Pomiary);
+        await Db.SaveChangesAsync();
+
+        await OnSredniaChanged.InvokeAsync(SredniaTop50);
+    }
 
     private void StartStopera()
     {
@@ -182,18 +206,23 @@
 
     private async Task ZapiszPomiar()
     {
-        Pomiary.Add(new PomiarCzasu
+        var nowy = new PomiarCzasu
         {
+            PomiarId = Pomiar.Id,
             Numer = Pomiary.Count + 1,
             Czas = Math.Round(czasStopera, 2),
             Uwagi = uwagiDoPomiaru
-        });
+        };
+
+        Db.PomiaryCzasu.Add(nowy);
+        await Db.SaveChangesAsync();
+
+        Pomiary.Add(nowy);
 
         czasStopera = 0;
         uwagiDoPomiaru = "";
 
         await OnSredniaChanged.InvokeAsync(SredniaTop50);
-
     }
 
 
@@ -259,6 +288,10 @@
 
             return Math.Round(Top50Czasy.Average(), 2);
         }
+    }
+    private async Task ZapiszNaglowekPomiaru()
+    {
+        await Db.SaveChangesAsync();
     }
 
 }
