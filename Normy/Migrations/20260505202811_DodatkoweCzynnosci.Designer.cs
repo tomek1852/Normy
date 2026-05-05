@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Normy.Data;
 
@@ -10,9 +11,11 @@ using Normy.Data;
 namespace Normy.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260505202811_DodatkoweCzynnosci")]
+    partial class DodatkoweCzynnosci
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -207,46 +210,6 @@ namespace Normy.Migrations
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("AspNetUsers", (string)null);
-                });
-
-            modelBuilder.Entity("Normy.Models.DodatkowaCzynnosc", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CoIleSztuk")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Nazwa")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<double>("Pomiar1")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("Pomiar2")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("Pomiar3")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("Pomiar4")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("Pomiar5")
-                        .HasColumnType("REAL");
-
-                    b.Property<string>("WybranaCzynnoscZPomiarow")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("WyrobId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("DodatkoweCzynnosci");
                 });
 
             modelBuilder.Entity("Normy.Models.Pomiar", b =>

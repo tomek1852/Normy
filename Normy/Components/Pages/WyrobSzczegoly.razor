@@ -2,8 +2,8 @@
 @using Microsoft.EntityFrameworkCore
 @using Normy.Data
 @using Normy.Models
-@inject ApplicationDbContext Db
 @rendermode InteractiveServer
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 
 <h3>Szczegóły wyrobu</h3>
 
@@ -107,6 +107,8 @@ else if (aktywnyWidok == "podsumowanie")
         </label>
     </div>
 
+
+
     @if (SredniaKoncowa.HasValue)
     {
         <div class="alert alert-primary">
@@ -119,6 +121,12 @@ else if (aktywnyWidok == "podsumowanie")
             Brak pomiarów wybranych do średniej końcowej.
         </div>
     }
+
+    <button class="btn btn-success mt-3"
+            @onclick="ZapiszNorme">
+        Zapisz normę
+    </button>
+
     <h5>Dodatkowe czynności</h5>
 
     <button class="btn btn-success btn-sm mb-3" @onclick="DodajDodatkowaCzynnosc">
@@ -241,6 +249,13 @@ else if (aktywnyWidok == "podsumowanie")
             (średnia z @DodatkoweZPomiarow.Count pomiarów)
         </div>
     }
+
+    @if (wyrob?.WyliczonaNorma != null)
+    {
+        <div class="alert alert-success">
+            Zapisana norma: <b>@wyrob.WyliczonaNorma szt./zmianę</b>
+        </div>
+    }
 }
 
 
@@ -289,7 +304,10 @@ else if (aktywnyWidok == "podsumowanie")
 
     protected override async Task OnInitializedAsync()
     {
-        wyrob = await Db.Wyroby
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        wyrob = await db.Wyroby
+            .AsNoTracking()
             .FirstOrDefaultAsync(w => w.Id == wyrobId);
 
         if (wyrob is null)
@@ -302,11 +320,20 @@ else if (aktywnyWidok == "podsumowanie")
         pomiary1 = await PobierzCzasyPomiaru(pomiar1.Id);
         pomiary2 = await PobierzCzasyPomiaru(pomiar2.Id);
         pomiary3 = await PobierzCzasyPomiaru(pomiar3.Id);
+
+        SredniaTop50Pomiar1 = ObliczSredniaTop50(pomiary1);
+        SredniaTop50Pomiar2 = ObliczSredniaTop50(pomiary2);
+        SredniaTop50Pomiar3 = ObliczSredniaTop50(pomiary3);
+
+        await WczytajDodatkoweCzynnosci();
     }
 
     private async Task<Pomiar> PobierzLubUtworzPomiar(int typ)
     {
-        var pomiar = await Db.Pomiary
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var pomiar = await db.Pomiary
+            .AsNoTracking()
             .FirstOrDefaultAsync(p => p.WyrobId == wyrobId && p.Typ == typ);
 
         if (pomiar is not null)
@@ -324,15 +351,21 @@ else if (aktywnyWidok == "podsumowanie")
             Zmiana = "I"
         };
 
-        Db.Pomiary.Add(pomiar);
-        await Db.SaveChangesAsync();
+        db.Pomiary.Add(pomiar);
+        await db.SaveChangesAsync();
+
+        pomiar.Czasy = new();
+        pomiar.Wyrob = null;
 
         return pomiar;
     }
 
     private async Task<List<PomiarCzasu>> PobierzCzasyPomiaru(int pomiarId)
     {
-        return await Db.PomiaryCzasu
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        return await db.PomiaryCzasu
+            .AsNoTracking()
             .Where(p => p.PomiarId == pomiarId)
             .OrderBy(p => p.Numer)
             .Select(p => new PomiarCzasu
@@ -350,6 +383,10 @@ else if (aktywnyWidok == "podsumowanie")
 
     private void UstawWidok(string widok)
     {
+        SredniaTop50Pomiar1 = ObliczSredniaTop50(pomiary1);
+        SredniaTop50Pomiar2 = ObliczSredniaTop50(pomiary2);
+        SredniaTop50Pomiar3 = ObliczSredniaTop50(pomiary3);
+
         aktywnyWidok = widok;
     }
 
@@ -456,6 +493,101 @@ else if (aktywnyWidok == "podsumowanie")
 
             return (int)Math.Floor(DostepnyCzasSekundy / CzasJednostkowy.Value);
         }
+    }
+
+    private async Task ZapiszNorme()
+    {
+        if (wyrob is null || !NormaNaZmiane.HasValue)
+            return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var rekord = await db.Wyroby.FindAsync(wyrob.Id);
+
+        if (rekord is not null)
+        {
+            rekord.WyliczonaNorma = NormaNaZmiane.Value;
+            rekord.Status = "Wyliczona norma";
+
+            await db.SaveChangesAsync();
+
+            wyrob.WyliczonaNorma = rekord.WyliczonaNorma;
+            wyrob.Status = rekord.Status;
+        }
+
+        await ZapiszDodatkoweCzynnosci();
+    }
+    private double? ObliczSredniaTop50(List<PomiarCzasu> pomiary)
+    {
+        var top50 = pomiary
+            .Where(p => !p.Wykluczony && !p.DodatkowaCzynnosc)
+            .Select(p => p.Czas)
+            .OrderBy(x => x)
+            .Take(50)
+            .ToList();
+
+        if (!top50.Any())
+            return null;
+
+        if (top50.Count >= 5)
+        {
+            double q1 = top50[(int)(top50.Count * 0.25)];
+            double q3 = top50[(int)(top50.Count * 0.75)];
+
+            double iqr = q3 - q1;
+            double min = q1 - 1.5 * iqr;
+            double max = q3 + 1.5 * iqr;
+
+            top50 = top50
+                .Where(x => x >= min && x <= max)
+                .ToList();
+        }
+
+        return top50.Any()
+            ? Math.Round(top50.Average(), 2)
+            : null;
+    }
+
+    private async Task WczytajDodatkoweCzynnosci()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        dodatkoweCzynnosci = await db.DodatkoweCzynnosci
+            .AsNoTracking()
+            .Where(x => x.WyrobId == wyrobId)
+            .ToListAsync();
+    }
+
+    private async Task ZapiszDodatkoweCzynnosci()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var stare = await db.DodatkoweCzynnosci
+            .Where(x => x.WyrobId == wyrobId)
+            .ToListAsync();
+
+        db.DodatkoweCzynnosci.RemoveRange(stare);
+
+        foreach (var c in dodatkoweCzynnosci)
+        {
+            if (string.IsNullOrWhiteSpace(c.Nazwa))
+                continue;
+
+            db.DodatkoweCzynnosci.Add(new DodatkowaCzynnosc
+            {
+                WyrobId = wyrobId,
+                Nazwa = c.Nazwa,
+                CoIleSztuk = c.CoIleSztuk,
+                Pomiar1 = c.Pomiar1,
+                Pomiar2 = c.Pomiar2,
+                Pomiar3 = c.Pomiar3,
+                Pomiar4 = c.Pomiar4,
+                Pomiar5 = c.Pomiar5,
+                WybranaCzynnoscZPomiarow = c.WybranaCzynnoscZPomiarow
+            });
+        }
+
+        await db.SaveChangesAsync();
     }
 
 }

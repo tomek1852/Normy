@@ -13,4 +13,5 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Wyrob> Wyroby => Set<Wyrob>();
     public DbSet<Pomiar> Pomiary => Set<Pomiar>();
     public DbSet<PomiarCzasu> PomiaryCzasu => Set<PomiarCzasu>();
+    public DbSet<DodatkowaCzynnosc> DodatkoweCzynnosci { get; set; }
 }

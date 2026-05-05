@@ -2,6 +2,9 @@
 
 public class DodatkowaCzynnosc
 {
+    public int Id { get; set; }
+    public int WyrobId { get; set; }
+
     public string Nazwa { get; set; } = "";
     public int CoIleSztuk { get; set; } = 1;
 

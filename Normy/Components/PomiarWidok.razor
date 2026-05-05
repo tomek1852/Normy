@@ -4,6 +4,8 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject Normy.Data.ApplicationDbContext Db
 @using Normy.Models
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<Normy.Data.ApplicationDbContext> DbFactory
 
 <h4>@Tytul</h4>
 
@@ -79,7 +81,13 @@
     </div>
 </div>
 
+<button class="btn btn-outline-primary btn-sm mb-3"
+        @onclick="ZapiszWszystko">
+    Zapisz
+</button>
+
 <hr />
+
 
 <h5>Stoper</h5>
 
@@ -99,14 +107,17 @@
 </div>
 
 <button class="btn btn-primary btn-sm mb-3 ms-2"
-        @onclick="ZapiszPomiar">
+        @onclick="ZapiszPomiar"
+        disabled="@(czasStopera <= 0)">
     Zapisz pomiar
 </button>
 
-<button class="btn btn-outline-primary btn-sm mb-3"
-        @onclick="ZapiszNaglowekPomiaru">
-    Zapisz dane pomiaru
-</button>
+@if (!string.IsNullOrWhiteSpace(komunikat))
+{
+    <div class="alert alert-success">
+        @komunikat
+    </div>
+}
 
 <hr />
 
@@ -149,11 +160,6 @@
 
 </table>
 
-<button class="btn btn-outline-success btn-sm"
-        @onclick="ZapiszZmianyWPomiarach">
-    Zapisz zmiany w tabeli
-</button>
-
 
 @code {
     [Parameter] public string Tytul { get; set; } = "";
@@ -161,6 +167,7 @@
     [Parameter] public List<PomiarCzasu> Pomiary { get; set; } = new();
     [Parameter] public EventCallback<double?> OnSredniaChanged { get; set; }
 
+    private string? komunikat;
     private string uwagiDoPomiaru = "";
     private double czasStopera = 0;
     private System.Timers.Timer? timer;
@@ -168,10 +175,53 @@
     private int LiczbaSztuk =>
         Pomiar.LicznikStop - Pomiar.LicznikStart;
 
-    private async Task ZapiszZmianyWPomiarach()
+
+    private async Task ZapiszWszystko()
     {
-        Db.PomiaryCzasu.UpdateRange(Pomiary);
-        await Db.SaveChangesAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // 🔹 zapis nagłówka
+        db.Pomiary.Update(Pomiar);
+
+        // 🔹 zapis zmian w pomiarach
+        foreach (var p in Pomiary)
+        {
+            var rekord = await db.PomiaryCzasu.FindAsync(p.Id);
+
+            if (rekord is not null)
+            {
+                rekord.Uwagi = p.Uwagi;
+                rekord.Wykluczony = p.Wykluczony;
+                rekord.DodatkowaCzynnosc = p.DodatkowaCzynnosc;
+            }
+        }
+
+        await db.SaveChangesAsync();
+
+        komunikat = "Zapisano wszystkie dane";
+
+        await OnSredniaChanged.InvokeAsync(SredniaTop50);
+    }
+
+    private async Task ZapiszZmianyPomiarow()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        foreach (var p in Pomiary)
+        {
+            var rekord = await db.PomiaryCzasu.FindAsync(p.Id);
+
+            if (rekord is not null)
+            {
+                rekord.Uwagi = p.Uwagi;
+                rekord.Wykluczony = p.Wykluczony;
+                rekord.DodatkowaCzynnosc = p.DodatkowaCzynnosc;
+            }
+        }
+
+        await db.SaveChangesAsync();
+
+        komunikat = "Zapisano zmiany w pomiarach.";
 
         await OnSredniaChanged.InvokeAsync(SredniaTop50);
     }
@@ -206,21 +256,42 @@
 
     private async Task ZapiszPomiar()
     {
+        //StopStopera();
+
+        if (Pomiar.Id <= 0)
+            return;
+
+        if (czasStopera <= 0)
+            return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var pomiarId = Pomiar.Id;
+
+        var ostatniNumer = await db.PomiaryCzasu
+            .AsNoTracking()
+            .Where(p => p.PomiarId == pomiarId)
+            .MaxAsync(p => (int?)p.Numer) ?? 0;
+
         var nowy = new PomiarCzasu
         {
-            PomiarId = Pomiar.Id,
-            Numer = Pomiary.Count + 1,
+            PomiarId = pomiarId,
+            Numer = ostatniNumer + 1,
             Czas = Math.Round(czasStopera, 2),
-            Uwagi = uwagiDoPomiaru
+            Uwagi = uwagiDoPomiaru,
+            Wykluczony = false,
+            DodatkowaCzynnosc = false
         };
 
-        Db.PomiaryCzasu.Add(nowy);
-        await Db.SaveChangesAsync();
+        db.PomiaryCzasu.Add(nowy);
+        await db.SaveChangesAsync();
 
         Pomiary.Add(nowy);
 
         czasStopera = 0;
         uwagiDoPomiaru = "";
+
+        komunikat = $"Zapisano pomiar nr {nowy.Numer}";
 
         await OnSredniaChanged.InvokeAsync(SredniaTop50);
     }

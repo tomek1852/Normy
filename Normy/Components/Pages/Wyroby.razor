@@ -8,8 +8,8 @@
 @using Microsoft.AspNetCore.Authorization
 @using Normy.Data
 @using Normy.Models
-@inject ApplicationDbContext Db
 @using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 
 
 <h3>Wyroby</h3>
@@ -72,6 +72,7 @@
             <th>Operacja</th>
             <th>Maszyna</th>
             <th>Status</th>
+            <th>Norma (szt./zmianę)</th>
             <th></th>
         </tr>
     </thead>
@@ -83,6 +84,7 @@
                 <td>@wyrob.NumerOperacji</td>
                 <td>@wyrob.NumerMaszyny</td>
                 <td>@wyrob.Status</td>
+                <td>@wyrob.WyliczonaNorma</td>
                 <td>
                     <button class="btn btn-primary btn-sm"
                             @onclick="() => OtworzWyrob(wyrob)">
@@ -110,7 +112,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        wyroby = await Db.Wyroby.ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        wyroby = await db.Wyroby
+            .AsNoTracking()
+            .OrderBy(w => w.NumerWyrobu)
+            .ToListAsync();
     }
 
     private IEnumerable<Wyrob> FiltrowaneWyroby =>
@@ -132,16 +139,18 @@
             return;
         }
 
+        await using var db = await DbFactory.CreateDbContextAsync();
+
         var nowy = new Wyrob
         {
-            NumerWyrobu = nowyNumerWyrobu,
-            NumerOperacji = nowyNumerOperacji,
-            NumerMaszyny = nowyNumerMaszyny,
+            NumerWyrobu = nowyNumerWyrobu.Trim(),
+            NumerOperacji = nowyNumerOperacji.Trim(),
+            NumerMaszyny = nowyNumerMaszyny.Trim(),
             Status = "W trakcie"
         };
 
-        Db.Wyroby.Add(nowy);
-        await Db.SaveChangesAsync();
+        db.Wyroby.Add(nowy);
+        await db.SaveChangesAsync();
 
         wyroby.Add(nowy);
 
@@ -157,10 +166,17 @@
 
     private async Task UsunWyrob(Wyrob wyrob)
     {
-        Db.Wyroby.Remove(wyrob);
-        await Db.SaveChangesAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
 
-        wyroby.Remove(wyrob);
+        var rekord = await db.Wyroby.FindAsync(wyrob.Id);
+
+        if (rekord is not null)
+        {
+            db.Wyroby.Remove(rekord);
+            await db.SaveChangesAsync();
+
+            wyroby.Remove(wyrob);
+        }
     }
 
 }
